@@ -1,13 +1,15 @@
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
 
 object WordCounterWithActor extends App {
+  trait ActorWithLogging extends Actor with ActorLogging
+
   // companion object
   object WordCounterMaster {
     case class Initialize(nChildren: Int)
     case class WordCountTask(text: String, taskId: Int)
     case class WordCountReply(count: Int, taskId: Int)
   }
-  class WordCounterMaster extends Actor {
+  class WordCounterMaster extends ActorWithLogging {
     import WordCounterMaster._
 
     def logTaskResult(
@@ -16,8 +18,10 @@ object WordCounterWithActor extends App {
         workerRefList: Seq[ActorRef],
         requestMap: Map[Int, ActorRef]
     ): Unit = {
-      println(
-        s"[${self.path}] [Result] Number of word for task $taskId is $count}"
+      log.info(
+        "[Result] Number of word for task {} is {}}",
+        taskId,
+        count
       )
 
       /**
@@ -48,8 +52,9 @@ object WordCounterWithActor extends App {
 
       val task = WordCountTask(text, currTaskId)
 
-      println(
-        s"[${self.path}] Received a new task. Sending it to $workerNoToBeAssigned"
+      log.info(
+        "Received a new task. Sending it to {}",
+        workerNoToBeAssigned
       )
 
       worker ! task
@@ -71,13 +76,13 @@ object WordCounterWithActor extends App {
     }
 
     def initializeWorker(nChildren: Int): Unit = {
-      println(s"[${self.path}] initializing $nChildren worker...")
+      log.info("Initializing {} worker...", nChildren)
 
       val workerRefList: Seq[ActorRef] =
         for (i <- 1 to nChildren)
           yield context.actorOf(Props[WordCountWorker], s"child_$i")
 
-      println(s"[${self.path}] $nChildren worker initialized...")
+      log.info("{} worker initialized...", nChildren)
 
       context.become(
         handleWork(workerRefList, currTaskId = 0, requestMap = Map())
@@ -89,21 +94,22 @@ object WordCounterWithActor extends App {
     }
   }
 
-  class WordCountWorker extends Actor {
+  class WordCountWorker extends ActorWithLogging {
     import WordCounterMaster.{WordCountTask, WordCountReply}
 
     def countWord(text: String): Int = text.split(" ").length
 
     override def receive: Receive = {
       case WordCountTask(text, taskId) =>
-        println(
-          s"[${self.path}] got a new task with taskId $taskId. Processing..."
+        log.info(
+          "Got a new task with taskId {}. Processing...",
+          taskId
         )
         sender() ! WordCountReply(countWord(text), taskId)
     }
   }
 
-  class Tester extends Actor {
+  class Tester extends ActorWithLogging {
     import WordCounterMaster._
     override def receive: Receive = {
       case "go" =>
@@ -122,7 +128,7 @@ object WordCounterWithActor extends App {
 
         taskList.foreach(task => masterWorker ! task)
 
-      case count: Int => println(s"[${self.path}] Got my result $count")
+      case count: Int => log.info("Got my result {}", count)
     }
   }
 
